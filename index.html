@@ -2,10 +2,10 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Simple Excel Viewer – VIP Portfolio</title>
+<title>Excel Import – Debug mit Progress</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- Excel Library -->
+<!-- SheetJS -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
 <style>
@@ -13,12 +13,34 @@ body{
   background:#0b1020;
   color:#e7ecff;
   font-family:Arial, sans-serif;
-  margin:20px;
+  padding:20px;
 }
-h1{margin-bottom:10px}
+h1{margin-bottom:5px}
 input,button{
   padding:10px;
   margin:5px 0;
+}
+#progressWrap{
+  width:100%;
+  background:#222;
+  border-radius:6px;
+  overflow:hidden;
+  margin-top:10px;
+  height:20px;
+}
+#progressBar{
+  height:100%;
+  width:0%;
+  background:#7c5cff;
+  transition:width .2s;
+}
+#log{
+  background:#000;
+  padding:10px;
+  margin-top:15px;
+  font-size:12px;
+  max-height:200px;
+  overflow:auto;
 }
 table{
   width:100%;
@@ -43,12 +65,17 @@ tr:nth-child(even){
 
 <body>
 
-<h1>VIP Portfolio – Excel Import (Simple)</h1>
+<h1>Excel Import – sichtbar & sicher</h1>
+<p>Wenn hier Logs erscheinen, läuft JavaScript korrekt.</p>
 
-<input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
-<button onclick="importFile()">Importieren</button>
+<input type="file" id="fileInput" accept=".xlsx,.xls">
+<button onclick="importExcel()">Excel importieren</button>
 
-<div id="status"></div>
+<div id="progressWrap">
+  <div id="progressBar"></div>
+</div>
+
+<pre id="log"></pre>
 
 <table id="table">
   <thead></thead>
@@ -56,37 +83,76 @@ tr:nth-child(even){
 </table>
 
 <script>
-function importFile(){
+const logEl = document.getElementById("log");
+const progressBar = document.getElementById("progressBar");
+
+function log(msg){
+  console.log(msg);
+  logEl.textContent += msg + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+log("✅ Script geladen");
+
+function setProgress(p){
+  progressBar.style.width = p + "%";
+}
+
+function importExcel(){
+  log("▶ Import gestartet");
+  setProgress(5);
+
   const file = document.getElementById("fileInput").files[0];
   if(!file){
-    alert("Bitte zuerst eine Datei auswählen");
+    alert("Bitte Excel-Datei auswählen");
+    log("❌ Keine Datei ausgewählt");
     return;
   }
 
-  const ext = file.name.split(".").pop().toLowerCase();
+  log("📂 Datei erkannt: " + file.name);
+  setProgress(10);
 
-  if(ext === "csv"){
-    file.text().then(text => {
-      const rows = text.split(/\r?\n/).map(r => r.split(","));
-      renderTable(rows);
-    });
-  } 
-  else {
-    const reader = new FileReader();
-    reader.onload = e => {
+  const reader = new FileReader();
+
+  reader.onerror = () => {
+    log("❌ FileReader Fehler");
+  };
+
+  reader.onload = (e) => {
+    log("📥 Datei gelesen (ArrayBuffer)");
+    setProgress(30);
+
+    try{
       const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
+      log("🧠 XLSX.read()");
+      const workbook = XLSX.read(data, { type: "array" });
+
+      log("📄 Sheets gefunden: " + workbook.SheetNames.join(", "));
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+      setProgress(50);
+      log("🔄 Sheet → JSON");
+
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      log("📊 Zeilen gesamt: " + rows.length);
+      setProgress(70);
+
       renderTable(rows);
-    };
-    reader.readAsArrayBuffer(file);
-  }
+      setProgress(100);
+      log("✅ Import abgeschlossen – Tabelle gerendert");
+
+    }catch(err){
+      log("❌ FEHLER: " + err.message);
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
 }
 
 function renderTable(rows){
   if(!rows || !rows.length){
-    alert("Keine Daten gefunden");
+    log("⚠ Keine Daten im Sheet");
     return;
   }
 
@@ -97,13 +163,13 @@ function renderTable(rows){
   tbody.innerHTML = "";
 
   // Header
-  const hrow = document.createElement("tr");
+  const hr = document.createElement("tr");
   rows[0].forEach(h => {
     const th = document.createElement("th");
     th.textContent = h;
-    hrow.appendChild(th);
+    hr.appendChild(th);
   });
-  thead.appendChild(hrow);
+  thead.appendChild(hr);
 
   // Rows
   for(let i=1;i<rows.length;i++){
@@ -115,9 +181,6 @@ function renderTable(rows){
     });
     tbody.appendChild(tr);
   }
-
-  document.getElementById("status").textContent =
-    `Import erfolgreich – ${rows.length - 1} Zeilen geladen`;
 }
 </script>
 
