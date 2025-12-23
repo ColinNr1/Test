@@ -2,208 +2,124 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VIP Portfolio Tracker – Universal Excel</title>
+<title>Simple Excel Viewer – VIP Portfolio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
+<!-- Excel Library -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
 <style>
-:root{
-  --bg:#0b1020;--panel:#101a33;--line:rgba(255,255,255,.1);
-  --text:#e7ecff;--muted:#9aa4d6;--accent:#7c5cff;
-  --good:#2bff9f;--bad:#ff4d6d;--warn:#ffd166;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+body{
+  background:#0b1020;
+  color:#e7ecff;
+  font-family:Arial, sans-serif;
+  margin:20px;
 }
-body{margin:0;background:var(--bg);color:var(--text);}
-header{padding:18px;border-bottom:1px solid var(--line);}
-.wrap{max-width:1400px;margin:auto;padding:18px;}
-.card{
-  background:linear-gradient(180deg,#101a33,#0f1730);
-  border:1px solid var(--line);border-radius:14px;
-  margin-bottom:16px;
+h1{margin-bottom:10px}
+input,button{
+  padding:10px;
+  margin:5px 0;
 }
-.card h3{margin:0;padding:14px;border-bottom:1px solid var(--line);}
-.card .body{padding:14px;}
-input,select,textarea,button{
-  width:100%;padding:10px;border-radius:10px;
-  border:1px solid var(--line);
-  background:rgba(255,255,255,.05);color:var(--text);
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+  font-size:12px;
 }
-button{cursor:pointer;background:linear-gradient(180deg,#7c5cff55,#7c5cff22);}
-.grid{display:grid;gap:14px;}
-.grid.c4{grid-template-columns:repeat(4,1fr);}
-.grid.c3{grid-template-columns:repeat(3,1fr);}
-label{font-size:12px;color:var(--muted);}
-table{width:100%;border-collapse:collapse;font-size:12px;}
-th,td{padding:8px;border-bottom:1px solid var(--line);}
-th{cursor:pointer;color:var(--muted);}
-.good{color:var(--good);} .bad{color:var(--bad);} .warn{color:var(--warn);}
-.host-box label{display:flex;gap:6px;font-size:12px;}
-.mono{font-family:monospace;}
-@media(max-width:900px){.grid.c4,.grid.c3{grid-template-columns:1fr}}
+th,td{
+  border:1px solid #333;
+  padding:6px;
+}
+th{
+  background:#101a33;
+  position:sticky;
+  top:0;
+}
+tr:nth-child(even){
+  background:#111;
+}
 </style>
 </head>
 
 <body>
-<header>
-<h2>VIP Portfolio Tracker – Universal Excel Engine</h2>
-<div style="font-size:12px;color:var(--muted)">
-Beliebige Excel-Struktur · Alle Spalten nutzbar · Multi-Host · PID Override
-</div>
-</header>
 
-<div class="wrap">
+<h1>VIP Portfolio – Excel Import (Simple)</h1>
 
-<div class="card">
-<h3>1️⃣ Datei importieren (Excel / CSV)</h3>
-<div class="body grid c3">
-  <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
-  <button onclick="importFile()">Importieren</button>
-  <button onclick="wipeAll()">Alles löschen</button>
-</div>
-</div>
+<input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+<button onclick="importFile()">Importieren</button>
 
-<div class="card">
-<h3>2️⃣ Spalten zuordnen (einmalig pro Datei)</h3>
-<div class="body grid c3" id="mapping"></div>
-</div>
+<div id="status"></div>
 
-<div class="card">
-<h3>3️⃣ Filter</h3>
-<div class="body grid c3">
-  <div>
-    <label>PID(s)</label>
-    <textarea id="pidFilter"></textarea>
-  </div>
-  <div>
-    <label>Hosts</label>
-    <div id="hostBox" class="host-box"></div>
-  </div>
-  <div>
-    <label>Suche</label>
-    <input id="searchBox">
-    <button style="margin-top:10px" onclick="applyFilters()">Anwenden</button>
-  </div>
-</div>
-</div>
-
-<div class="grid c4">
-  <div class="card"><div class="body"><b id="kPlayers">0</b><br>Spieler</div></div>
-  <div class="card"><div class="body"><b id="kDep">0</b><br>Deposits</div></div>
-  <div class="card"><div class="body"><b id="kNgr">0</b><br>NGR</div></div>
-  <div class="card"><div class="body"><b id="kBR">–</b><br>Ø Bonus Ratio</div></div>
-</div>
-
-<div class="card">
-<h3>4️⃣ Daten (alle Spalten)</h3>
-<div class="body" style="overflow:auto">
-<table>
-<thead id="thead"></thead>
-<tbody id="tbody"></tbody>
+<table id="table">
+  <thead></thead>
+  <tbody></tbody>
 </table>
-</div>
-</div>
-
-</div>
 
 <script>
-const STORE="VIP_PORTFOLIO_UNIVERSAL";
-let rows=[],headers=[],map={},view=[];
-
-function save(){localStorage.setItem(STORE,JSON.stringify({rows,headers,map}));}
-function load(){
-  const d=JSON.parse(localStorage.getItem(STORE)||"{}");
-  rows=d.rows||[]; headers=d.headers||[]; map=d.map||{};
-}
-load();
-
 function importFile(){
-  const f=fileInput.files[0]; if(!f)return;
-  const ext=f.name.split(".").pop().toLowerCase();
-  if(ext==="csv"){
-    f.text().then(t=>handleSheet(t.split(/\r?\n/).map(r=>r.split(","))));
-  }else{
-    f.arrayBuffer().then(b=>{
-      const wb=XLSX.read(b,{type:"array"});
-      handleSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}));
+  const file = document.getElementById("fileInput").files[0];
+  if(!file){
+    alert("Bitte zuerst eine Datei auswählen");
+    return;
+  }
+
+  const ext = file.name.split(".").pop().toLowerCase();
+
+  if(ext === "csv"){
+    file.text().then(text => {
+      const rows = text.split(/\r?\n/).map(r => r.split(","));
+      renderTable(rows);
     });
+  } 
+  else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      renderTable(rows);
+    };
+    reader.readAsArrayBuffer(file);
   }
 }
 
-function handleSheet(data){
-  headers=data[0];
-  rows=data.slice(1).filter(r=>r.some(c=>c));
-  renderMapping();
-  save();
-}
+function renderTable(rows){
+  if(!rows || !rows.length){
+    alert("Keine Daten gefunden");
+    return;
+  }
 
-function renderMapping(){
-  const keys=["PID","HOST","DEPOSIT","NGR","LOSS","BONUS"];
-  mapping.innerHTML=keys.map(k=>`
-    <div>
-      <label>${k}</label>
-      <select onchange="map['${k}']=this.value">
-        <option value="">–</option>
-        ${headers.map(h=>`<option value="${h}" ${map[k]===h?"selected":""}>${h}</option>`).join("")}
-      </select>
-    </div>`).join("");
-}
+  const thead = document.querySelector("#table thead");
+  const tbody = document.querySelector("#table tbody");
 
-function applyFilters(){
-  const pids=pidFilter.value.split(/[\s,]+/).filter(Boolean);
-  const hosts=[...document.querySelectorAll("#hostBox input:checked")].map(x=>x.value);
-  const q=searchBox.value.toLowerCase();
+  thead.innerHTML = "";
+  tbody.innerHTML = "";
 
-  view=rows.filter(r=>{
-    const o=obj(r);
-    if(pids.length && !pids.includes(o.PID))return false;
-    if(!pids.length && hosts.length && !hosts.includes(o.HOST))return false;
-    if(q && !JSON.stringify(o).toLowerCase().includes(q))return false;
-    return true;
+  // Header
+  const hrow = document.createElement("tr");
+  rows[0].forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    hrow.appendChild(th);
   });
+  thead.appendChild(hrow);
 
-  renderTable();
-  renderKPIs();
+  // Rows
+  for(let i=1;i<rows.length;i++){
+    const tr = document.createElement("tr");
+    rows[i].forEach(c => {
+      const td = document.createElement("td");
+      td.textContent = c ?? "";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById("status").textContent =
+    `Import erfolgreich – ${rows.length - 1} Zeilen geladen`;
 }
-
-function obj(r){
-  const o={};
-  headers.forEach((h,i)=>o[h]=r[i]);
-  Object.keys(map).forEach(k=>o[k]=o[map[k]]);
-  return o;
-}
-
-function renderTable(){
-  thead.innerHTML="<tr>"+headers.map(h=>`<th>${h}</th>`).join("")+"</tr>";
-  tbody.innerHTML=view.map(r=>{
-    return "<tr>"+headers.map((h,i)=>`<td>${r[i]||""}</td>`).join("")+"</tr>";
-  }).join("");
-
-  renderHosts();
-}
-
-function renderHosts(){
-  const hs=[...new Set(rows.map(r=>obj(r).HOST).filter(Boolean))];
-  hostBox.innerHTML=hs.map(h=>`<label><input type="checkbox" value="${h}">${h}</label>`).join("");
-}
-
-function renderKPIs(){
-  const num=v=>+String(v).replace(",","." )||0;
-  kPlayers.textContent=view.length;
-  kDep.textContent=view.reduce((s,r)=>s+num(obj(r).DEPOSIT),0);
-  kNgr.textContent=view.reduce((s,r)=>s+num(obj(r).NGR),0);
-  const br=view.filter(r=>num(obj(r).DEPOSIT))
-    .map(r=>num(obj(r).BONUS)/num(obj(r).DEPOSIT));
-  kBR.textContent=br.length?(br.reduce((a,b)=>a+b)/br.length*100).toFixed(1)+"%":"–";
-}
-
-function wipeAll(){
-  if(!confirm("Alles löschen?"))return;
-  rows=[];headers=[];map={};
-  save();location.reload();
-}
-
-if(rows.length){renderMapping();applyFilters();}
 </script>
+
 </body>
 </html>
