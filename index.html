@@ -2,11 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Excel Import – Debug mit Progress</title>
+<title>Excel Import – FIXED</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- SheetJS -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+<!-- XLSX LIBRARY – zuverlässig -->
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js"
+  integrity="sha512-fQ2p+Y4xXHzkwmo7aX6ixkmKuuNHYsYvwdivgLPgAvFp8ZUBKbjsgg7sWXBJgp7wa9u0edPFpKnz03WxZmf0Rg=="
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer">
+</script>
 
 <style>
 body{
@@ -15,154 +20,96 @@ body{
   font-family:Arial, sans-serif;
   padding:20px;
 }
-h1{margin-bottom:5px}
-input,button{
-  padding:10px;
-  margin:5px 0;
-}
-#progressWrap{
-  width:100%;
-  background:#222;
-  border-radius:6px;
-  overflow:hidden;
-  margin-top:10px;
-  height:20px;
-}
-#progressBar{
-  height:100%;
-  width:0%;
-  background:#7c5cff;
-  transition:width .2s;
-}
-#log{
-  background:#000;
-  padding:10px;
-  margin-top:15px;
-  font-size:12px;
-  max-height:200px;
-  overflow:auto;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:20px;
-  font-size:12px;
-}
-th,td{
-  border:1px solid #333;
-  padding:6px;
-}
-th{
-  background:#101a33;
-  position:sticky;
-  top:0;
-}
-tr:nth-child(even){
-  background:#111;
-}
+button,input{padding:10px;margin:5px 0}
+#log{background:#000;padding:10px;margin-top:10px;font-size:12px}
+#barWrap{width:100%;height:18px;background:#222;border-radius:5px;overflow:hidden}
+#bar{height:100%;width:0%;background:#7c5cff}
+table{width:100%;border-collapse:collapse;margin-top:20px;font-size:12px}
+th,td{border:1px solid #333;padding:6px}
+th{background:#101a33}
 </style>
 </head>
 
 <body>
 
-<h1>Excel Import – sichtbar & sicher</h1>
-<p>Wenn hier Logs erscheinen, läuft JavaScript korrekt.</p>
+<h1>Excel Import – FINAL FIX</h1>
 
 <input type="file" id="fileInput" accept=".xlsx,.xls">
-<button onclick="importExcel()">Excel importieren</button>
+<button id="btn">Excel importieren</button>
 
-<div id="progressWrap">
-  <div id="progressBar"></div>
-</div>
-
+<div id="barWrap"><div id="bar"></div></div>
 <pre id="log"></pre>
 
-<table id="table">
-  <thead></thead>
-  <tbody></tbody>
+<table>
+  <thead id="thead"></thead>
+  <tbody id="tbody"></tbody>
 </table>
 
 <script>
 const logEl = document.getElementById("log");
-const progressBar = document.getElementById("progressBar");
+const bar = document.getElementById("bar");
 
 function log(msg){
   console.log(msg);
   logEl.textContent += msg + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
 }
 
-log("✅ Script geladen");
+function progress(p){ bar.style.width = p + "%"; }
 
-function setProgress(p){
-  progressBar.style.width = p + "%";
+// 🔴 HARTE PRÜFUNG
+if (typeof XLSX === "undefined") {
+  log("❌ XLSX NICHT GELADEN");
+  alert("Excel Library (XLSX) konnte nicht geladen werden.\nBitte Cache leeren oder CDN prüfen.");
+} else {
+  log("✅ XLSX geladen: " + XLSX.version);
 }
 
-function importExcel(){
-  log("▶ Import gestartet");
-  setProgress(5);
-
-  const file = document.getElementById("fileInput").files[0];
-  if(!file){
-    alert("Bitte Excel-Datei auswählen");
-    log("❌ Keine Datei ausgewählt");
+document.getElementById("btn").onclick = () => {
+  if (typeof XLSX === "undefined") {
+    alert("XLSX fehlt – Import abgebrochen");
     return;
   }
 
-  log("📂 Datei erkannt: " + file.name);
-  setProgress(10);
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) {
+    alert("Bitte Excel auswählen");
+    return;
+  }
+
+  log("📂 Datei: " + file.name);
+  progress(10);
 
   const reader = new FileReader();
 
-  reader.onerror = () => {
-    log("❌ FileReader Fehler");
-  };
+  reader.onload = e => {
+    progress(30);
+    const data = new Uint8Array(e.target.result);
+    log("📥 Datei gelesen");
 
-  reader.onload = (e) => {
-    log("📥 Datei gelesen (ArrayBuffer)");
-    setProgress(30);
+    const wb = XLSX.read(data, { type: "array" });
+    log("📄 Sheets: " + wb.SheetNames.join(", "));
+    progress(60);
 
-    try{
-      const data = new Uint8Array(e.target.result);
-      log("🧠 XLSX.read()");
-      const workbook = XLSX.read(data, { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-      log("📄 Sheets gefunden: " + workbook.SheetNames.join(", "));
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    log("📊 Zeilen: " + rows.length);
+    progress(80);
 
-      setProgress(50);
-      log("🔄 Sheet → JSON");
-
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-      log("📊 Zeilen gesamt: " + rows.length);
-      setProgress(70);
-
-      renderTable(rows);
-      setProgress(100);
-      log("✅ Import abgeschlossen – Tabelle gerendert");
-
-    }catch(err){
-      log("❌ FEHLER: " + err.message);
-    }
+    render(rows);
+    progress(100);
+    log("✅ Fertig");
   };
 
   reader.readAsArrayBuffer(file);
-}
+};
 
-function renderTable(rows){
-  if(!rows || !rows.length){
-    log("⚠ Keine Daten im Sheet");
-    return;
-  }
-
-  const thead = document.querySelector("#table thead");
-  const tbody = document.querySelector("#table tbody");
-
+function render(rows){
+  const thead = document.getElementById("thead");
+  const tbody = document.getElementById("tbody");
   thead.innerHTML = "";
   tbody.innerHTML = "";
 
-  // Header
   const hr = document.createElement("tr");
   rows[0].forEach(h => {
     const th = document.createElement("th");
@@ -171,8 +118,7 @@ function renderTable(rows){
   });
   thead.appendChild(hr);
 
-  // Rows
-  for(let i=1;i<rows.length;i++){
+  for (let i = 1; i < rows.length; i++) {
     const tr = document.createElement("tr");
     rows[i].forEach(c => {
       const td = document.createElement("td");
